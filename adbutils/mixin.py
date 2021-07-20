@@ -179,6 +179,8 @@ class ShellMixin(object):
                 path_or_url: str,
                 nolaunch: bool = False,
                 uninstall: bool = False,
+                grant_runtime_permissions: bool = False,
+                auto_uninstall: bool = False,
                 silent: bool = False,
                 callback: typing.Callable[[str], None] = None):
         """
@@ -188,6 +190,8 @@ class ShellMixin(object):
             path_or_url: local path or http url
             nolaunch: do not launch app after install
             uninstall: uninstall app before install
+            grant_runtime_permissions: Grant all runtime permissions during install
+            auto_uninstall: Uninstall existing package automatically if update is not possible
             silent: disable log message print
             callback: only two event now: <"BEFORE_INSTALL" | "FINALLY">
         
@@ -248,7 +252,11 @@ class ShellMixin(object):
             if callback:
                 callback("BEFORE_INSTALL")
 
-            self.install_remote(dst, clean=True)
+            if grant_runtime_permissions:
+                _dprint("Granting all runtime permissions")
+                self.install_remote(dst, clean=True, flags=["-r", "-t", "-g"])
+            else:
+                self.install_remote(dst, clean=True)
             _dprint("Success installed, time used %d seconds" %
                     (time.time() - start))
             if not nolaunch:
@@ -256,14 +264,18 @@ class ShellMixin(object):
                 self.app_start(package_name, main_activity)
 
         except AdbInstallError as e:
-            if e.reason in [
+            if auto_uninstall and e.reason in [
                     "INSTALL_FAILED_PERMISSION_MODEL_DOWNGRADE",
                     "INSTALL_FAILED_UPDATE_INCOMPATIBLE",
                     "INSTALL_FAILED_VERSION_DOWNGRADE"
             ]:
                 _dprint("uninstall %s because %s" % (package_name, e.reason))
                 self.uninstall(package_name)
-                self.install_remote(dst, clean=True)
+                if grant_runtime_permissions:
+                    _dprint("Granting all runtime permissions")
+                    self.install_remote(dst, clean=True, flags=["-r", "-t", "-g"])
+                else:
+                    self.install_remote(dst, clean=True)
                 _dprint("Success installed, time used %d seconds" %
                         (time.time() - start))
                 if not nolaunch:
@@ -275,7 +287,11 @@ class ShellMixin(object):
                     # ])
             elif e.reason == "INSTALL_FAILED_CANCELLED_BY_USER":
                 _dprint("Catch error %s, reinstall" % e.reason)
-                self.install_remote(dst, clean=True)
+                if grant_runtime_permissions:
+                    _dprint("Granting all runtime permissions")
+                    self.install_remote(dst, clean=True, flags=["-r", "-t", "-g"])
+                else:
+                    self.install_remote(dst, clean=True)
                 _dprint("Success installed, time used %d seconds" %
                         (time.time() - start))
             else:
